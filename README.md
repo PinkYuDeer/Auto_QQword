@@ -2,7 +2,8 @@
 一个批量抽取QQ好友字符的小程序。
 效果：
 ![image](https://github.com/PinkYuDeer/Auto_QQword/assets/83949453/ec6a0baa-d5a1-4e4e-b99a-8b6b5b60ca11)
-如果运行出现了乱码或者/033等说明缺少解析彩色控制台的转义文件，可以在[这里](https://github.com/adoxa/ansicon/releases)下载，运行对应版本的exe即可。
+
+-如果运行出现了乱码或者/033等说明缺少解析彩色控制台的转义文件，可以在[这里](https://github.com/adoxa/ansicon/releases)下载，运行对应版本的exe即可。
 
 ## 使用说明：
 - 下载py文件或release里通过pyinstaller打包好的exe文件。
