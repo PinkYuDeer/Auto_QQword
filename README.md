@@ -15,18 +15,36 @@
 ## 登录信息获取方式：
 在任意设备上登录qq，然后查看ti.qq.com的cookies复制。
 【例子：】作者使用的是[全平台抓包软件ProxyPIN](https://github.com/wanghongenpin/network_proxy_flutter)，步骤为：
-打开ProxyPin-打开https代理-开始抓包-打开QQ-打开好友标识界面【注意：一定要打开好友标识界面，如图：】——
+1. 打开ProxyPin
+2. 打开https代理
+3. 开始抓包
+4. 打开QQ
+5. 打开好友标识界面【注意：一定要打开好友标识界面，如图：】
 ![image](https://github.com/PinkYuDeer/Auto_QQword/assets/83949453/93bd9037-2740-46b7-92d3-636c53528950)
 
-返回ProxyPin-停止抓包-域名列表-ti.qq.com-点进一个GET后面链接中有friends_mutualmark的选项内——
-### cookie
-【cookie：】-Request-Cookie-Select all-Copy Value-粘贴至程序内。
+6. 返回ProxyPin
+7. 停止抓包
+8. 域名列表
+9. ti.qq.com
 
 ![image](https://github.com/PinkYuDeer/Auto_QQword/assets/83949453/20ce3f16-9c4e-4a62-9732-98b7c47bc696)
+
+10. 点进一个GET后面链接中有friends_mutualmark的选项。
+### 【cookie：】
+- 点击Request
+- 找到Cookie
+- 长按点击Select all
+- 点击Copy Value
+- 粘贴至程序内。
+
 ![image](https://github.com/PinkYuDeer/Auto_QQword/assets/83949453/023eab45-88a6-4bcc-a839-d6b55bc51e00)
 
-### url
-【url：】-General-Request URL-Select all-CopyValue-粘贴至程序内。
+### 【url：】
+- 点击General
+- 找到Request URL(如果使用其他抓包软件请复制包含bkn和version的链接)
+- 长按点击Select all
+- 点击Copy Value
+- 粘贴至程序内。
 
 
 ## 其中，录入QQ号可以手动完成：
