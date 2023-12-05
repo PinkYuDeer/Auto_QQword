@@ -1,338 +1,753 @@
-# -*- coding: utf8 -*-
 import base64
 import json
 import re
-
+import time
+import threading
 import requests
+import configparser
 from lxml import etree
-
-QQ = []
-myself_qq = 0
+import os
 
 
-# 初始化 cookie
-def init_cookie(file_name):
-    cookies = {}
-    try:
-        with open('cookie.ini') as file:
-            lines = file.readlines()
-            for line in lines:
-                # 解析每一行，获取名称、值和默认值
-                name, value = init_cookie_line(line)
-                if name is not None:
-                    cookies[name] = value
-        return cookies
-    except FileNotFoundError:
-        cookies = input('请输入cookie：')
-        return process_cookies(file_name, cookies)
+class MyThread(threading.Thread):
+    def __init__(self, func, args=()):
+        super(MyThread, self).__init__()
+        self.func = func
+        self.args = args
+        self.my_result = None
+
+    def run(self):
+        self.my_result = self.func(*self.args)
+
+    def result(self):
+        self.join()  # 等待线程执行完毕
+        return self.my_result
 
 
-# 解析每行cookie数据
-def init_cookie_line(line):
-    parts = line.strip().split(' ')
-    if not parts[0].startswith('-'):
-        name = parts[0]
-        if parts[1] == 'null' and len(parts) > 2 and parts[2] != 'null':
-            value = parts[2]
-        else:
-            value = parts[1]
-        return name, value
-    else:
-        return None, None
+class QQ:
+    myself_QQ = 0
+    QQ_list = {}
 
+    def __init__(self):
+        try:
+            config = configparser.RawConfigParser()
+            config.read('qq.ini', encoding='utf-8')
+            self.myself_QQ = config['myself']['account']
+            for account, name in config['QQ_list'].items():
+                self.QQ_list[account] = name if name else ''
+        except FileNotFoundError:
+            self.first_run()
+        except KeyError:
+            self.first_run()
 
-# 读取旧的 cookie 文件
-def read_cookie(file_name):
-    cookies = {}
-    try:
-        with open(file_name, 'r') as file:
-            lines = file.readlines()
-            for line in lines:
-                # 解析每一行，获取名称、值和默认值
-                name, value, default, delete = parse_cookie_line(line)
-                cookies[name] = {'value': value, 'default': default, 'delete': delete}
-    except FileNotFoundError:
-        pass
-    return cookies
-
-
-# 解析每行cookie数据
-def parse_cookie_line(line):
-    parts = line.strip().split(' ')
-    if parts[0].startswith('-'):
-        name = parts[0][1:]
-        delete = True
-    else:
-        name = parts[0]
-        delete = False
-    value = parts[1] if len(parts) > 1 and parts[1] != 'null' else None
-    default = parts[2] if len(parts) > 2 and parts[2] != 'null' else None
-    return name, value, default, delete
-
-
-# 处理 cookie 数据
-def process_cookies(file_name, cookies):
-    processed_cookies = {}
-    write_cookies = {}
-
-    # 将新的 cookie 数据"domainId=338; pvid=9714795492"转换为字典
-    new_cookies = {}
-    for cookie in cookies.split('; '):
-        parts = cookie.split('=')
-        if len(parts) == 2:
-            new_cookies[parts[0]] = parts[1]
-
-    # 读取旧的 cookie 数据
-    old_cookies = read_cookie(file_name)
-
-    # 遍历新的 cookie 数据，如果旧的 cookie 中有默认值，则将新的 cookie 的默认值设为旧的 cookie 的默认值
-    for name, value in new_cookies.items():
-        processed_cookies[name] = value
-        if name in old_cookies and old_cookies[name]['default'] is not None:
-            write_cookies[name] = {'value': value, 'default': old_cookies[name]['default'], 'delete': False}
-        else:
-            write_cookies[name] = {'value': value, 'default': None, 'delete': False}
-
-    # 遍历旧的 cookie 数据，如果旧的 cookie 数据不在新的 cookie 数据中，则将旧的 cookie 数据的默认值设为新的 cookie 数据的默认值 或 删除旧的 cookie 数据
-    for name, values in old_cookies.items():
-        if name not in processed_cookies:
-            if values['default'] is not None:
-                processed_cookies[name] = values['default']
-                write_cookies[name] = {'value': None, 'default': values['default'], 'delete': False}
-            else:
-                write_cookies[name] = {'value': values['value'], 'default': None, 'delete': True}
-
-    # 排序，首先按照是否删除排序为删除在后，未删除在前；其次按照有默认值在前，没有默认值在后；最后按照name的首字母排序
-    write_cookies = sorted(write_cookies.items(), key=lambda x: (not x[1]['delete'], not x[1]['default'], x[0]))
-
-    # 将处理后的 cookie 数据写入文件, 一行一个 cookie，格式为：name value default 或 -name value default
-    # 其中 -name value default 表示曾经出现过的 cookie，其中value在default不为空时可能为null，default为空时则格式为：name value
-    with open(file_name, 'w') as file:
-        for name, values in write_cookies:
-            if values['default'] is not None:
-                if values['delete']:
-                    file.write('-' + name + ' ' + values['value'] + ' ' + values['default'] + '\n')
-                else:
-                    file.write(name + ' ' + str(values['value']) + ' ' + str(values['default']) + '\n')
-            else:
-                if values['delete']:
-                    file.write('-' + name + ' ' + values['value'] + '\n')
-                else:
-                    file.write(name + ' ' + str(values['value']) + '\n')
-
-    return processed_cookies
-
-
-def read_QQ():
-    try:
-        with open('qq.ini', encoding='utf-8') as f:
-            for line in f:
-                data = line.strip().split(' ')
-                if len(data) == 1:
-                    QQ.append([data[0], ''])  # 如果没有备注，则将备注设为空字符串
-                else:
-                    if data[1] == '__我':
-                        global myself_qq
-                        myself_qq = int(data[0])
-                    else:
-                        QQ.append([data[0], ' '.join(data[1:])])
-    except FileNotFoundError:
-        add_QQ()
-
-
-def add_QQ():
-    print('检测到第一次使用，请输入自己的QQ号')
-    global myself_qq
-    myself_qq = input('请输入自己的QQ号：')
-    print('请手动输入批量抽卡的QQ号和备注（QQ号和备注用空格分隔，输入空行结束）')
-    count = 0
-    with open('qq.ini', 'w', encoding='utf-8') as f:
-        f.write(myself_qq + ' ' + '__我' + '\n')
-        while True:
-            count += 1
-            qq_data = input(f"{count}: ").split(' ')
-            if qq_data[0] == '':  # 检查是否输入空行
-                print('添加成功，总共添加', count - 1, '个账号')
-                break
-            qq = qq_data[0]
-            if len(qq_data) > 1:
-                note = ' '.join(qq_data[1:])
-            else:
-                note = ''
-            QQ.append([qq, note])
-            f.write(qq + ' ' + note + '\n')
-
-
-def count_card(cookies, qq):
-    user_agent = 'Mozilla/5.0 (Linux; Android 8.0.0; FLA-AL20 Build/HUAWEIFLA-AL20; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/66.0.3359.126 MQQBrowser/6.2 TBS/045130 Mobile Safari/537.36 V1_AND_SQ_8.2.8_1346_YYB_D QQ/8.2.8.4440 NetType/4G WebP/0.3.0 Pixel/1080 StatusBarHeight/73 SimpleUISwitch/0 QQTheme/1000'
-    host = 'ti.qq.com'
-    url_get = 'https://ti.qq.com/hybrid-h5/interactive_logo/word'
-    params = {
-        'target_uin': qq[0],
-        '_wv': '67108867',
-        '_nav_txtclr': '000000',
-        '_wvSb': '0'
-    }
-    headers = {
-        'User-Agent': user_agent,
-        'host': host
-    }
-    r = requests.get(url_get, params=params, headers=headers, cookies=cookies)
-    html = etree.HTML(r.text)
-    div_elements = html.xpath('//*[@id="app"]/div[1]/div[2]/div[3]/div[2]/div')
-    number_of_card = len(div_elements) - 1
-    if number_of_card == 0:
-        print("已拥有字符：" + str(number_of_card) + "个")
-        return
-    else:
-        print("已拥有字符：" + str(number_of_card) + "个", end='/')
-
+    def first_run(self):
         count = 0
-        unknown = 0
-
-        for div_element in div_elements:
-            # 提取span中的文本内容
-            span_texts = div_element.xpath('.//div[@class="cell-title"]/span/text()')
-
-            if not span_texts:
-                span_texts = div_element.xpath('.//div[@class="cell-title select"]/span/text()')
-
-            # 检查是否存在span文本
-            if span_texts:
-                span_text = span_texts[0].strip()
-
-                # 提取url地址
-                url = div_element.xpath('.//div[@class="image-wrapper"]/div/@style')[0]
-                url_number = 0
-
-                # 匹配URL中的数字，考虑数字在@前或者.前的情况
-                match = re.search(r'[-_.](\d+)@|-(\d+)\.', url)
-
-                if match:
-                    if match.group(1):
-                        url_number = int(match.group(1)) - 1
-                    elif match.group(2):
-                        url_number = int(match.group(2))
-                else:
-                    unknown += 1
+        self.myself_QQ = input('\n检测到第一次使用，请输入自己的QQ号：')
+        print('请手动输入批量抽卡的QQ号和备注（QQ号和备注用空格分隔，输入空行结束）')
+        while True:
+            qq_data = input(f"{count + 1}: ").split(' ')
+            if qq_data[0] == '':
+                print('添加成功，总共添加' + str(count - 1) + '个账号')
+                break
+                # 检查输入合法性
+            if not qq_data[0].isdigit():
+                print('QQ号必须为纯数字')
+                continue
+            if qq_data[0] in self.QQ_list:
+                print('QQ号已存在')
+                continue
+            if len(qq_data) > 2:
+                print('备注不能有空格，请检查格式为：QQ号+空格+不含空格的备注')
+                continue
+            elif len(qq_data) > 1:
+                if qq_data[1] == '__我':
+                    print('备注不能为__我')
                     continue
+                if qq_data[1] in self.QQ_list.values():
+                    print('备注已存在')
+                    if input('是否允许重复备注？（y/n）') == 'n':
+                        continue
+            self.QQ_list[qq_data[0]] = qq_data[1] if len(qq_data) > 1 else ''
+            count += 1
+        self.save()
 
-                # 检查条件：span中的字母数量与url地址中的数字是否相等
-                if len(re.findall(r'[a-zA-Z]', span_text)) <= url_number:
-                    count += 1
-        if unknown == 0:
-            print("完全点亮：" + str(count) + "张")
+    def save(self):
+        fr_config = configparser.RawConfigParser()
+        fr_config['myself'] = {'account': self.myself_QQ}
+        fr_config['QQ_list'] = {}
+        for fr_account, fr_name in self.QQ_list.items():
+            fr_config['QQ_list'][fr_account] = fr_name if fr_name else ''
+        with open('qq.ini', 'w', encoding='utf-8') as f:
+            fr_config.write(f)
+
+
+class Setting:
+    setting = {}
+    cookies = {}
+
+    def __init__(self):
+        try:
+            config = configparser.RawConfigParser()
+            config.read('setting.ini', encoding='utf-8')
+            self.setting = config['setting']
+            self.cookies = config['cookies']
+        except FileNotFoundError:
+            self.first_run()
+        except KeyError:
+            self.first_run()
+
+    # 第一次运行
+    def first_run(self):
+        print('检测到第一次使用，请设置抽卡参数')
+        self.input_setting(2)
+        # 检查初始参数
+        if 'QQ_locale_id' not in self.setting:
+            self.setting['QQ_locale_id'] = '2052'
+        if 'domainId' not in self.setting:
+            self.setting['domainId'] = '338'
+        if 'pgv_pvi' not in self.cookies:
+            self.cookies['pgv_pvi'] = '112969728'
+        if 'pgv_si' not in self.cookies:
+            self.cookies['pgv_si'] = 's6262475776'
+        fs_config = configparser.RawConfigParser()
+        fs_config['setting'] = self.setting
+        fs_config['cookies'] = self.cookies
+        with open('setting.ini', 'w', encoding='utf-8') as f:
+            fs_config.write(f)
+
+    # 输入设置
+    def input_setting(self, input_mode):
+        if input_mode > 0:
+            cookies_str = input('请输入cookies：')
+            url = input('请输入url：')
+            # url如：https://ti.qq.com/interactive_new/cgi-bin/friends_mutualmark/aggregate/home/get?frd_uin=747405109&version=8.9.93&bkn=1708188483
+            # 解析version和bkn
+            params = re.findall(r'\?(.*?)$', url)[0].split('&')
+            for param in params:
+                param = param.split('=')
+                if param[0] == 'version':
+                    self.setting['version'] = param[1]
+                elif param[0] == 'bkn':
+                    self.setting['bkn'] = param[1]
+            for cookie in cookies_str.split('; '):
+                cookie = cookie.split('=')
+                if len(cookie) == 2:
+                    self.cookies[cookie[0]] = cookie[1]
+        if input_mode > 1 or input_mode == 0:
+            self.setting['mode'] = input('请输入详细程度【1：抽卡】，【2：抽卡+统计好友关系】，【3：抽卡+预测卡池+统计好友关系】：')
+        self.save()
+
+    # 保存设置
+    def save(self):
+        fs_config = configparser.RawConfigParser()
+        fs_config['setting'] = self.setting
+        fs_config['cookies'] = self.cookies
+        with open('setting.ini', 'w', encoding='utf-8') as f:
+            fs_config.write(f)
+
+    # 重置cookies
+    def recover_cookies(self):
+        self.input_setting(1)
+        # 排序cookies
+        cookies = {}
+        for key in sorted(self.cookies):
+            cookies[key] = self.cookies[key]
+        self.cookies = cookies
+        self.save()
+
+
+class Words:
+    words = {}
+
+    def __init__(self):
+        try:
+            with open('data/words.txt', 'r', encoding='utf-8') as f:
+                for line in f:
+                    data = line.strip().split(' ')
+                    self.words[data[0]] = {
+                        'word': data[1],
+                        'description': data[2],
+                        'url': data[3],
+                        'first_time': data[4],
+                        'last_time': data[5],
+                        'count': data[6],
+                        'first_qq': data[7],
+                        'last_qq': data[8],
+                        'qq_count': data[9]
+                    }
+        except FileNotFoundError:
+            if not os.path.exists('data'):
+                os.makedirs('data')
+            with open('data/words.txt', 'w', encoding='utf-8'):
+                pass
+
+    def save(self):
+        # 将已抽卡信息写入文件，按照id排序
+        # 文件中每行的格式为：卡片id 卡片描述 卡片文字 卡片图片url 最早抽中时间 最近抽中时间 抽中次数 最早抽中QQ 最近抽中QQ 抽中QQ总数
+        with open('data/words.txt', 'w', encoding='utf-8') as f:
+            for word in sorted(self.words.items(), key=lambda x: x[0]):
+                f.write(word[0] + ' ' + word[1]['word'] + ' ' + word[1]['description'] + ' ' + word[1]['url'] + ' ' +
+                        word[1]['first_time'] + ' ' + word[1]['last_time'] + ' ' + word[1]['count'] + ' ' +
+                        word[1]['first_qq'] + ' ' + word[1]['last_qq'] + ' ' + word[1]['qq_count'] + '\n')
+
+    def add_word(self, word, account):
+        if word[0] not in self.words:
+            self.words[word[0]] = {
+                'word': word[1],
+                'description': word[2].replace(' ', '-'),
+                'url': word[3],
+                'first_time': time.strftime("%Y/%m/%d-%H:%M:%S", time.localtime()),
+                'last_time': time.strftime("%Y/%m/%d-%H:%M:%S", time.localtime()),
+                'count': '1',
+                'first_qq': account,
+                'last_qq': account,
+                'qq_count': '1'
+            }
         else:
-            print("完全点亮：" + str(count) + "张/无法判断：" + str(unknown) + "张")
+            self.words[word[0]]['last_time'] = time.strftime("%Y/%m/%d %H:%M:%S", time.localtime())
+            self.words[word[0]]['count'] = str(int(self.words[word[0]]['count']) + 1)
+            self.words[word[0]]['description'] = word[2].replace(' ', '-')
+            self.words[word[0]]['last_qq'] = account
+            self.words[word[0]]['qq_count'] = str(int(self.words[word[0]]['qq_count']) + 1)
 
 
-def get_card(cookies):
+class MyRequest:
     user_agent = 'Mozilla/5.0 (Linux; Android 8.0.0; FLA-AL20 Build/HUAWEIFLA-AL20; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/66.0.3359.126 MQQBrowser/6.2 TBS/045130 Mobile Safari/537.36 V1_AND_SQ_8.2.8_1346_YYB_D QQ/8.2.8.4440 NetType/4G WebP/0.3.0 Pixel/1080 StatusBarHeight/73 SimpleUISwitch/0 QQTheme/1000'
     host = 'ti.qq.com'
-    card_get = 0
-    card_null = 0
-    qq_pass = 0
-    qq_done = 0
-    for qq in QQ:
-        qq_done += 1
-        print('\n', qq_done, '/', len(QQ), end=' ')
-        if qq[1] == '':
-            print("：" + qq[0], end=' - ')
-        else:
-            print("：" + qq[0] + ' ' + qq[1], end=' - ')
-        url_get = 'https://ti.qq.com/hybrid-h5/interactive_logo/two'
+    setting = None
+    cookies = {}
+    data = []
+
+    def __init__(self, setting, cookies):
+        self.setting = setting
+        self.cookies = cookies
+
+    def count_relation(self, account):
+        url = 'https://ti.qq.com/interactive_new/cgi-bin/friends_mutualmark/aggregate/home/get'
         params = {
-            'target_uin': qq[0],
+            'frd_uin': account,
+            'version': self.setting['version'],
+            'bkn': self.setting['bkn']
+        }
+        headers = {
+            'User-Agent': self.user_agent,
+            'host': self.host,
+            'Accept': 'application/json; charset=utf-8'
+        }
+        response = None
+        try:
+            response = requests.get(url, params=params, headers=headers, cookies=self.cookies)
+            if response.status_code == 200:
+                return json.loads(response.text)['data']
+            else:
+                print('\033[1;31m获取好友关系失败，错误码：' + str(response.status_code) + '\033[0m')
+        except requests.exceptions.RequestException as e:
+            print('\033[1;31m获取好友关系失败，错误信息：' + str(e) + '\033[0m')
+        except KeyError:
+            print('\033[1;31m获取好友关系失败，错误信息：' + str(response.text) + '\033[0m')
+        return "None"
+
+    def count_words(self, account):
+        url = 'https://ti.qq.com/hybrid-h5/interactive_logo/word'
+        params = {
+            'target_uin': account,
             '_wv': '67108867',
             '_nav_txtclr': '000000',
             '_wvSb': '0'
         }
         headers = {
-            'User-Agent': user_agent,
-            'host': host
+            'User-Agent': self.user_agent,
+            'host': self.host
         }
-        r = requests.get(url_get, params=params, headers=headers, cookies=cookies)
-        html = etree.HTML(r.text)
-        result = html.xpath('//*[@id="app"]/div[1]/div[3]/div[1]/span/span/text()')
-        if len(result) != 0:
-            process = html.xpath('//*[@id="app"]/div[1]/div[4]/div[2]/div[2]/div[2]/span/text()')
-            print('目前字符进度' + process[0], end='- ')
-            print(result[0].strip() + '个好友互动标识', end='：')
-            for count in range(int(result[0])):
-                c_name = html.xpath('//*[@id="app"]/div[1]/div[3]/div[' + str(count + 2) + ']/div[2]/text()')
-                c_days = html.xpath(
-                    '//*[@id="app"]/div[1]/div[3]/div[' + str(count + 2) + ']/div[3]/span[1]/text()')
-                if len(c_days) != 0:
-                    print(c_name[0].strip(), c_days[0], '天')
-                else:
-                    print(c_name[0])
-        else:
-            process = html.xpath('//*[@id="app"]/div[1]/div[3]/div[2]/div[2]/div[2]/span/text()')
-            print('目前字符进度' + process[0])
-        url_post = 'https://ti.qq.com/proxy/domain/oidb.tim.qq.com/v3/oidbinterface/oidb_0xdd0_0'
+        try:
+            response = requests.get(url, params=params, headers=headers, cookies=self.cookies)
+            if response.status_code == 200:
+                html = etree.HTML(response.text)
+                return html
+            else:
+                print('\033[1;31m获取卡片信息失败，错误码：' + str(response.status_code) + '\033[0m')
+        except requests.exceptions.RequestException as e:
+            print('\033[1;31m获取卡片信息失败，错误信息：' + str(e) + '\033[0m')
+        return None
+
+    def refresh_chance(self, account):
+        url = 'https://ti.qq.com/hybrid-h5/interactive_logo/two'
+        params = {
+            'target_uin': account,
+            '_wv': '67108867',
+            '_nav_txtclr': '000000',
+            '_wvSb': '0'
+        }
+        headers = {
+            'User-Agent': self.user_agent,
+            'host': self.host
+        }
+        try:
+            response = requests.get(url, params=params, headers=headers, cookies=self.cookies)
+            if response.status_code == 200:
+                return 200
+            else:
+                print('\033[1;31m刷新卡池失败，错误码：' + str(response.status_code) + '\033[0m')
+        except requests.exceptions.RequestException as e:
+            print('\033[1;31m刷新卡池失败，错误信息：' + str(e) + '\033[0m')
+        return None
+
+    def get_word(self, account: int, myself_QQ: int):
+        url = 'https://ti.qq.com/proxy/domain/oidb.tim.qq.com/v3/oidbinterface/oidb_0xdd0_0'
         params = {
             'sdkappid': '39998',
             'actype': '2',
-            'bkn': '125442749'
+            'bkn': self.setting['bkn']
         }
         headers = {
-            'User-Agent': user_agent,
-            'host': host,
-            'Content-Type': 'application/json'
+            'User-Agent': self.user_agent,
+            'host': self.host,
+            'content-type': 'application/json'
         }
-        is_pass = True
-        while True:
-            data = {
-                'uin': myself_qq,
-                'frd_uin': int(qq[0])
-            }
-            r = requests.post(url_post, headers=headers, params=params, data=json.dumps(data), cookies=cookies)
-            r = json.loads(r.text)
-            if r['ActionStatus'] == 'OK':
-                if r['card_url'] == '':
-                    print('没抽中', end=' - ')
-                    card_null += 1
-                    is_pass = False
-                else:
-                    print('\n抽到卡片', end='：')
-                    print(base64.b64decode(r['card_id']).decode(), end=' - ')
-                    print(base64.b64decode(r['card_word']).decode(), end=' - ')
-                    print(base64.b64decode(r['card_url']).decode())
-                    print("卡片描述：", base64.b64decode(r['rpt_wording'][0]).decode())
-                    card_get += 1
-                    is_pass = False
-            elif r['ActionStatus'] == 'FAIL':
-                if r['ErrorCode'] == 10005:
-                    if is_pass:
-                        qq_pass += 1
-                    print('今日次数已用完')
-                    count_card(cookies, qq)
-                    break
-                elif r['ErrorCode'] == 10006:
-                    print(' 警告 该QQ号不是你的好友')
-                    qq_pass += 1
-                    break
-                elif r['ErrorCode'] == 151:
-                    print(' 警告 登录过期')
-                    return 151
-                elif r['ErrorCode'] == 304:
-                    print(' 警告 请检查你的myself_qq，该数据应为int类型数字')
-                    return 304
-                print(' ErrorInfo: ', r['ErrorInfo'], ' ErrorCode: ', r['ErrorCode'])
+        data = {
+            'uin': myself_QQ,
+            'frd_uin': account,
+        }
+        try:
+            response = requests.post(url, params=params, headers=headers, cookies=self.cookies, data=json.dumps(data))
+            if response.status_code == 200:
+                get_word_data = json.loads(response.text)
+                return get_word_data
             else:
-                print(r)
-    print('\n总/抽中/null：', (card_get + card_null), '/', card_get, '/', card_null, '张字符，总/跳过',
-          len(QQ), '/', qq_pass, '个QQ号')
-    return 0
+                print('\033[1;31m获取卡片失败，错误码：' + str(response.status_code) + '\033[0m')
+        except requests.exceptions.RequestException as e:
+            print('\033[1;31m获取卡片失败，错误信息：' + str(e) + '\033[0m')
+
+    def get_word_status(self, account: int):
+        url = 'https://ti.qq.com/proxy/domain/oidb.tim.qq.com/v3/oidbinterface/oidb_0xdd3_0'
+        params = {
+            'sdkappid': '39998',
+            'actype': '2',
+            'bkn': self.setting['bkn']
+        }
+        headers = {
+            'User-Agent': self.user_agent,
+            'host': self.host,
+            'content-type': 'application/json'
+        }
+        data = {
+            "rpt_uint64_frd_uin": account,
+            "uint32_check_recentchat_timespan": 7,
+            "uint32_req_pic_type": 1,
+            "uint32_start_idx": 0,
+            "uint32_req_count": 149
+        }
+        try:
+            response = requests.post(url, params=params, headers=headers, cookies=self.cookies, data=json.dumps(data))
+            if response.status_code == 200:
+                get_word_status_data = json.loads(response.text)
+                return get_word_status_data
+            else:
+                print('\033[1;31m获取卡池状态失败，错误码：' + str(response.status_code) + '\033[0m')
+        except requests.exceptions.RequestException as e:
+            print('\033[1;31m获取卡池状态失败，错误信息：' + str(e) + '\033[0m')
+
+
+def main():
+    def print_relation_data(data):
+        light_up_num = data['light_up_num']
+        try:
+            if data['category_list'][3]['mutual_mark_state_list'][0]['status']['is_lightup']:
+                light_up_num -= 1
+        except IndexError:
+            pass
+        try:
+            word_process = data['category_list'][3]['mutual_mark_state_list'][0]['info']['graded'][0]['desc']
+            if word_process != '':
+                print('\33[35m字符进度：' + word_process + '\033[0m\033[40m', end=' - ')
+        except IndexError:
+            print('\33[35m暂无字符进度\033[0m\033[40m', end=' - ')
+            word_process = '暂无字符进度'
+        rarity_light_up_num = data['rarity_light_up_num']
+        if data['category_list'][2]['name'] == '幸运字符':
+            Qualified_num = 0
+            if data['category_list'][2]['light_up_num'] == 1:
+                light_up_num -= 1
+        else:
+            Qualified_num = data['category_list'][2]['total_num']
+        print(' 点亮标识个数：' + str(light_up_num) + '个', end='')
+        if int(rarity_light_up_num) > 0:
+            print('，点亮稀有标识：' + str(rarity_light_up_num) + '个', end='')
+        if int(Qualified_num) > 0:
+            print('，限定标识：' + str(Qualified_num) + '个', end='')
+        print(":")
+        mark = {}
+        line_item = 0
+        for category in data['category_list']:
+            for mutual_mark_state in category['mutual_mark_state_list']:
+                mark[mutual_mark_state['info']['intro']] = mutual_mark_state['status']['lightup_days']
+                if int(mutual_mark_state['status']['lightup_days']) > 0:
+                    # 如果mutual_mark_state['info']['intro']以数字开头，则输出mutual_mark_state
+                    if mutual_mark_state['info']['intro'][0].isdigit():
+                        level = mutual_mark_state['status']['level']
+                        for i in mutual_mark_state['info']['graded']:
+                            if i['level'] == level:
+                                print("\033[35m新奇物种：" + i['name'] + "\033[0m\033[40m" + '|\033[32m' +
+                                      mutual_mark_state['status']['lightup_days'] + '天\033[0m\033[40m', end='')
+                                line_item += 1
+                                if line_item == 4:
+                                    print("\033[36m" + ";" + "\033[0m\033[40m")
+                                    line_item = 0
+                                else:
+                                    print(' - ', end='')
+                                break
+                    else:
+                        print("\033[36m" + mutual_mark_state['info']['intro'] + "\033[0m\033[40m" + '|\033[32m' +
+                              mutual_mark_state['status']['lightup_days'] + '天\033[0m\033[40m', end='')
+                        line_item += 1
+                        if line_item == 4:
+                            print("\033[36m" + ";" + "\033[0m\033[40m")
+                            line_item = 0
+                        else:
+                            if category['mutual_mark_state_list'].index(mutual_mark_state) != len(
+                                    category['mutual_mark_state_list']) - 1:
+                                print(' - ', end='')
+                            else:
+                                print()
+        return word_process, light_up_num
+
+    def print_get_word_data(data, p_account):
+        get = 0
+        null = 0
+        if data['ActionStatus'] == 'OK':
+            if data['word_url'] == '':
+                print("\033[37m" + '没抽中' + "\033[0m\033[40m", end=' - ')
+                null += 1
+                return get, null, True, 201, None
+            else:
+                word = [base64.b64decode(data['word_id']).decode(), base64.b64decode(data['word_word']).decode(),
+                        base64.b64decode(data['rpt_wording'][0]).decode(), base64.b64decode(data['word_url']).decode()]
+                print("\033[33m" + '\n抽到卡片' + "\033[0m\033[40m", end='：')
+                print("\033[33m" + word[0] + "\033[0m\033[40m", end=' - ')
+                print("\033[33m" + word[1] + "\033[0m\033[40m", end=' - ')
+                print(word[3])
+                print("\033[33m" + "卡片描述：" + str(word[2]) + "\033[0m\033[40m")
+                get += 1
+                words.add_word(word, p_account)
+                return get, null, True, 200, word
+        elif data['ActionStatus'] == 'FAIL':
+            if data['ErrorCode'] == 10005:
+                # 绿色字体输出
+                print("\033[32m" + '今日次数已用完' + "\033[0m\033[40m")
+                return get, null, False, 202, None
+            elif data['ErrorCode'] == 10006:
+                print("\033[31m" + '该QQ号不是你的好友' + "\033[0m\033[40m")
+                return get, null, False, 203, None
+            elif data['ErrorCode'] == 151:
+                print("\033[31m" + '登录过期' + "\033[0m\033[40m")
+                return get, null, False, 151, None
+            elif data['ErrorCode'] == 304:
+                print("\033[31m" + '请检查你自己的qq号是否有误' + "\033[0m\033[40m")
+                return get, null, False, 304, None
+            print(' ErrorInfo: ', data['ErrorInfo'], ' ErrorCode: ', data['ErrorCode'])
+        else:
+            print(data)
+            return get, null, False, 404
+
+    def print_get_word_status_data(data):
+        if data['ActionStatus'] == 'OK':
+            specialword_frdInfo = data['rpt_msg_get_specialwordlist_rsp'][0]['msg_specialword_frdInfo']
+
+            can_get_word_count_max = specialword_frdInfo['msg_cur_specialword_cardInfo']['msg_specialword_attr']['msg_max_special_word_card_get_info'][
+                'uint32_can_get_card_count']
+            can_get_word_count_min = specialword_frdInfo['msg_cur_specialword_cardInfo']['msg_specialword_attr']['msg_min_special_word_card_get_info'][
+                'uint32_can_get_card_count']
+            print("\033[36m" + '剩余卡池：' + str(can_get_word_count_min) + '-' + str(can_get_word_count_max) + "\033[0m\033[40m", end=' - ')
+        else:
+            if data['ErrorCode'] == 204:
+                print("读卡错误")
+            else:
+                print(data)
+
+    def print_count_words_data(html):
+        div_elements = html.xpath('//*[@id="app"]/div[1]/div[2]/div[3]/div[2]/div')
+        if len(div_elements) > 3:
+            number_of_word = len(div_elements) - 1
+        else:
+            number_of_word = len(div_elements)
+        if number_of_word == 0:
+            print("\033[35m已拥有字符：" + str(number_of_word) + "个 \033[0m\033[40m")
+            return number_of_word, 0, 0
+        else:
+            print("\033[35m已拥有字符：" + str(number_of_word) + "个 \033[0m\033[40m", end='/')
+
+            count = 0
+            unknown = 0
+
+            for div_element in div_elements:
+                # 提取span中的文本内容
+                span_texts = div_element.xpath('.//div[@class="cell-title"]/span/text()')
+
+                if not span_texts:
+                    span_texts = div_element.xpath('.//div[@class="cell-title select"]/span/text()')
+
+                # 检查是否存在span文本
+                if span_texts:
+                    span_text = span_texts[0].strip()
+
+                    # 提取url地址
+                    url = div_element.xpath('.//div[@class="image-wrapper"]/div/@style')[0]
+                    url_number = 0
+
+                    # 匹配URL中的数字，考虑数字在@前或者.前的情况
+                    match = re.search(r'[-_.](\d+)@|-(\d+)\.', url)
+
+                    if match:
+                        if match.group(1):
+                            url_number = int(match.group(1)) - 1
+                        elif match.group(2):
+                            url_number = int(match.group(2))
+                    else:
+                        unknown += 1
+                        continue
+
+                    # 检查条件：span中的字母数量与url地址中的数字是否相等
+                    if len(re.findall(r'[a-zA-Z]', span_text)) <= url_number:
+                        count += 1
+            if unknown == 0:
+                print("\033[35m 完全点亮：" + str(count) + "张\033[0m\033[40m")
+            else:
+                print("\033[35m 完全点亮：" + str(count) + "张\033[0m\033[40m / \033[35m付费字符无法判断：" + str(unknown) + "张\33[0m\033[40m")
+        return number_of_word, count, unknown
+
+    def read_old_data(file_name):
+        old_data = {}
+        acIL = []
+        summary = {}
+        with open(file_name, 'r', encoding='utf-8') as f:
+            state = 0
+            for line in f:
+                if line[0:4] == 'QQ号 ':
+                    state = 1
+                    continue
+                elif line[0:2] == '总抽':
+                    state = 2
+                    continue
+                elif state == 1:
+                    data = line.strip().split(' ')
+                    acI = {
+                        'account': data[0],
+                        'name': data[1],
+                        'word_get_total': int(data[2]),
+                        'word_get_success': int(data[3]),
+                        'word_get_null': int(data[4]),
+                        'light_up': int(data[5]),
+                        'word_have': int(data[6]),
+                        'word_process': data[7],
+                        'word_light_up': int(data[8]),
+                        'word_unknown': int(data[9]),
+                        'words': []
+                    }
+                    for i in range(10, len(data)):
+                        data[i] = data[i].replace(' ', '')
+                        if data[i] != '':
+                            acI['words'].append(data[i])
+                    acIL.append(acI)
+                elif state == 2:
+                    data = line.strip().split(' ')
+                    summary['word_get_total'] = int(data[0])
+                    summary['word_get_success'] = int(data[1])
+                    summary['word_get_null'] = int(data[2])
+                    summary['account_count'] = int(data[3])
+                    summary['passed_account_count'] = int(data[4])
+            print('读取到' + str(len(acIL)) + '个账号的抽卡数据')
+            old_data['account_count'] = acIL
+            old_data['summary'] = summary
+        return old_data
+
+    def save_data():
+        print('正在保存抽卡结果...')
+        words.save()
+        file_name = 'data/' + time.strftime("%Y-%m-%d %H-%M-%S", time.localtime()) + '.txt'
+        summary = {
+            'word_get_total': word_get_success_count + word_get_null_count,
+            'word_get_success': word_get_success_count,
+            'word_get_null': word_get_null_count,
+            'account_count': len(qq.QQ_list),
+            'passed_account_count': passed_account_count
+        }
+        # data/读取文件列表
+        file_list = os.listdir('data')
+        # 判断文件列表中是否存在同天的文件，忽略时分秒
+        for file in file_list:
+            if file[0:10] == file_name[5:15]:
+                print('检测到同天的抽卡结果文件:' + file + '，正在合并...')
+                # 读取该文件中的内容，然后删除该文件，将新老数据合并后写入新文件
+                old_data = read_old_data('data/' + file)
+                os.remove('data/' + file)
+                summary['word_get_total'] += old_data['summary']['word_get_total']
+                summary['word_get_success'] += old_data['summary']['word_get_success']
+                summary['word_get_null'] += old_data['summary']['word_get_null']
+                summary['account_count'] += old_data['summary']['account_count']
+                summary['passed_account_count'] += old_data['summary']['passed_account_count']
+                for acI in old_data['account_count']:
+                    for ac in account_count:
+                        if ac['account'] == acI['account']:
+                            ac['word_get_total'] += acI['word_get_total']
+                            ac['word_get_success'] += acI['word_get_success']
+                            ac['word_get_null'] += acI['word_get_null']
+                            ac['light_up'] = acI['light_up']
+                            ac['word_have'] = acI['word_have']
+                            ac['word_light_up'] = acI['word_light_up']
+                            ac['word_unknown'] = acI['word_unknown']
+                            for word in acI['words']:
+                                if word not in ac['words']:
+                                    ac['words'].append(word)
+                        else:
+                            account_count.append(acI)
+                continue
+
+        with open(file_name, 'w', encoding='utf-8') as f:
+            f.write('主号码：' + qq.myself_QQ + '\n')
+            f.write('抽卡结果：\n')
+            f.write('QQ号 备注 总抽数 抽中数 未抽中数 点亮好友关系数 已拥有字符数 字符进度 已拥有完全点亮数 无法判断数 卡片id\n')  # 若备注为空，则备注为N/A
+            for ac in account_count:
+                f.write(ac['account'] + ' ' + ac['name'] + ' ' + str(ac['word_get_total']) + ' ' +
+                        str(ac['word_get_success']) + ' ' + str(ac['word_get_null']) + ' ' +
+                        str(ac['light_up']) + ' ' + str(ac['word_have']) + ' ' + ac['word_process'] + ' ' +
+                        str(ac['word_light_up']) + ' ' + str(ac['word_unknown']) + ' ')
+                for word in ac['words']:
+                    f.write(word[0] + ' ')
+                f.seek(f.tell() - 1, 0)
+                f.write('\n')
+            f.write('\n总抽 抽中 null 总人 跳过\n')
+            f.write(str(summary['word_get_total']) + ' ' + str(summary['word_get_success']) + ' ' +
+                    str(summary['word_get_null']) + ' ' + str(summary['account_count']) + ' ' +
+                    str(summary['passed_account_count']))
+        print('抽卡结果保存在' + file_name)
+
+    def progress_bar(current):
+        progress = current / total
+        progress_bar_length = 30
+        done_length = int(progress * progress_bar_length)
+        remaining_length = progress_bar_length - done_length
+
+        percentage = progress * 100
+        time_elapsed = time.time() - start_time if current > 0 else 0
+        time_per_unit = time_elapsed / current if current > 0 else 0
+        estimated_time_remaining = time_per_unit * (total - current)
+
+        progress_bar_str = '█' * done_length + '_' * remaining_length
+        if time_elapsed == 0:
+            status_str = f"[{progress_bar_str}] ({percentage:.2f}%)  */秒|剩余*秒 {current}/{total}"
+        else:
+            status_str = f"[{progress_bar_str}] ({percentage:.2f}%)  {current / time_elapsed:.2f}/秒|剩余{estimated_time_remaining:.2f}秒 {current}/{total}"
+        # 将status_str红字输出
+        if mode == -1:
+            print("\r")
+        print("\033[31m" + status_str + "\033[0m\033[40m", end='')
+        if mode != -1:
+            print()
+
+    qq = QQ()
+    setting = Setting()
+    words = Words()
+    my_request = MyRequest(setting.setting, setting.cookies)
+
+    word_get_success_count = 0
+    word_get_null_count = 0
+    passed_account_count = 0
+    all_account_passed = True
+    account_count = []
+
+    mode = int(setting.setting['mode'])
+
+    start_time = time.time()
+    process = 0
+    total = len(qq.QQ_list)
+    print('开始抽卡...')
+    for account, name in qq.QQ_list.items():
+        print("\033[0;30;47m " + account + ' ' + name + " \033[0m\033[40m", end=' - ')
+        account_count_info = {
+            'account': account,
+            'name': name,
+        }
+
+        # 获取好友关系 2
+        count_relation = MyThread(my_request.count_relation, args=(account,))
+
+        # 抽卡 1
+        refresh_chance = MyThread(my_request.refresh_chance, args=(account,))
+        get_word = MyThread(my_request.get_word, args=(account, qq.myself_QQ))
+
+        # 获取卡池状态 3
+        get_word_status = MyThread(my_request.get_word_status, args=(account,))
+
+        # 统计字符数量 2
+        count_words = MyThread(my_request.count_words, args=(account,))
+
+        # 开始线程
+        refresh_chance.start()
+        if mode >= 2:
+            count_relation.start()
+        get_word.start()
+        if mode >= 3:
+            get_word_status.start()
+
+        # 获取线程返回值
+        refresh_chance.join()
+        if mode >= 2:
+            account_count_info['word_process'], account_count_info['light_up'] = print_relation_data(count_relation.result())
+            print("-------------------------------------------")
+        is_passed = True
+        word_gets = []
+        while True:
+            if mode >= 3:
+                print_get_word_status_data(get_word_status.result())
+            p_get, p_null, p_success, status_code, p_word = print_get_word_data(get_word.result(), account)
+            if status_code == 151:
+                setting.recover_cookies()
+                my_request = MyRequest(setting, setting.cookies)
+                get_word = MyThread(my_request.get_word, args=(account, qq.myself_QQ))
+                get_word.start()
+                if mode >= 3:
+                    get_word_status = MyThread(my_request.get_word_status, args=(account,))
+                    get_word_status.start()
+                continue
+            word_get_success_count += p_get
+            word_get_null_count += p_null
+            if p_word is not None:
+                word_gets.append(p_word[0])
+            if p_success:
+                get_word = MyThread(my_request.get_word, args=(account, qq.myself_QQ))
+                get_word.start()
+                if mode >= 3:
+                    get_word_status = MyThread(my_request.get_word_status, args=(account,))
+                    get_word_status.start()
+                is_passed = False
+                all_account_passed = False
+            else:
+                account_count_info['word_get_success'] = p_get
+                account_count_info['word_get_null'] = p_null
+                account_count_info['word_get_total'] = p_get + p_null
+                account_count_info['words'] = word_gets
+                if is_passed:
+                    passed_account_count += 1
+                break
+
+        # 统计字符数量
+        if mode >= 2:
+            print("-------------------------------------------")
+            count_words.start()
+            account_count_info['word_have'], account_count_info['word_light_up'], account_count_info['word_unknown'] = print_count_words_data(
+                count_words.result())
+
+        account_count.append(account_count_info)
+        process += 1
+        progress_bar(process)
+        print("\33[0m=================================================================================================================")
+    print('\n\33[40m总抽 抽中 null 总人 跳过')
+    print(str(word_get_success_count + word_get_null_count) + ' ' + str(word_get_success_count) + ' ' + str(word_get_null_count) + ' ' + str(len(qq.QQ_list))
+          + ' ' + str(passed_account_count))
+    if not all_account_passed:
+        save_data()
 
 
 if __name__ == '__main__':
-    read_QQ()
-    status = get_card(init_cookie("cookie.ini"))
-    while status != 0:
-        if status == 151:
-            status = get_card(process_cookies("cookie.ini", input('请输入cookie：')))
-        if status == 304:
-            break
-
-input('按回车键退出')
+    main()
+    input('按任意键退出')
