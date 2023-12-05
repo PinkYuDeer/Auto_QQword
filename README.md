@@ -19,11 +19,13 @@
 ![image](https://github.com/PinkYuDeer/Auto_QQword/assets/83949453/93bd9037-2740-46b7-92d3-636c53528950)
 
 返回ProxyPin-停止抓包-域名列表-ti.qq.com-点进一个GET后面链接中有friends_mutualmark的选项内——
+### cookie
 【cookie：】-Request-Cookie-Select all-Copy Value-粘贴至程序内。
 
 ![image](https://github.com/PinkYuDeer/Auto_QQword/assets/83949453/20ce3f16-9c4e-4a62-9732-98b7c47bc696)
 ![image](https://github.com/PinkYuDeer/Auto_QQword/assets/83949453/023eab45-88a6-4bcc-a839-d6b55bc51e00)
 
+### url
 【url：】-General-Request URL-Select all-CopyValue-粘贴至程序内。
 
 
