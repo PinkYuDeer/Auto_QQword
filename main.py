@@ -571,7 +571,7 @@ def main():
             'account_count': len(qq.QQ_list),
             'passed_account_count': passed_account_count
         }
-        # data/读取文件列表
+        # data / 读取文件列表
         file_list = os.listdir('data')
         # 判断文件列表中是否存在同天的文件，忽略时分秒
         for file in file_list:
