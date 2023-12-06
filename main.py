@@ -415,13 +415,13 @@ def main():
         get = 0
         null = 0
         if data['ActionStatus'] == 'OK':
-            if data['word_url'] == '':
+            if data['card_url'] == '':
                 print("\033[37m" + '没抽中' + "\033[0m\033[40m", end=' - ')
                 null += 1
                 return get, null, True, 201, None
             else:
-                word = [base64.b64decode(data['word_id']).decode(), base64.b64decode(data['word_word']).decode(),
-                        base64.b64decode(data['rpt_wording'][0]).decode(), base64.b64decode(data['word_url']).decode()]
+                word = [base64.b64decode(data['card_id']).decode(), base64.b64decode(data['card_word']).decode(),
+                        base64.b64decode(data['rpt_wording'][0]).decode(), base64.b64decode(data['card_url']).decode()]
                 print("\033[33m" + '\n抽到卡片' + "\033[0m\033[40m", end='：')
                 print("\033[33m" + word[0] + "\033[0m\033[40m", end=' - ')
                 print("\033[33m" + word[1] + "\033[0m\033[40m", end=' - ')
@@ -447,7 +447,7 @@ def main():
             print(' ErrorInfo: ', data['ErrorInfo'], ' ErrorCode: ', data['ErrorCode'])
         else:
             print(data)
-            return get, null, False, 404
+            return get, null, False, 404, None
 
     def print_get_word_status_data(data):
         if data['ActionStatus'] == 'OK':
@@ -546,7 +546,7 @@ def main():
                     for i in range(10, len(data)):
                         data[i] = data[i].replace(' ', '')
                         if data[i] != '':
-                            acI['words'].append(data[i])
+                            acI['words'].append([data[i]])
                     acIL.append(acI)
                 elif state == 2:
                     data = line.strip().split(' ')
@@ -607,6 +607,7 @@ def main():
             f.write('抽卡结果：\n')
             f.write('QQ号 备注 总抽数 抽中数 未抽中数 点亮好友关系数 已拥有字符数 字符进度 已拥有完全点亮数 无法判断数 卡片id\n')  # 若备注为空，则备注为N/A
             for ac in account_count:
+                ac['name'] = 'N/A' if ac['name'] == '' else ac['name']
                 f.write(ac['account'] + ' ' + ac['name'] + ' ' + str(ac['word_get_total']) + ' ' +
                         str(ac['word_get_success']) + ' ' + str(ac['word_get_null']) + ' ' +
                         str(ac['light_up']) + ' ' + str(ac['word_have']) + ' ' + ac['word_process'] + ' ' +
@@ -690,13 +691,21 @@ def main():
             get_word_status.start()
 
         # 获取线程返回值
-        refresh_chance.join()
         if mode >= 2:
             account_count_info['word_process'], account_count_info['light_up'] = print_relation_data(count_relation.result())
             print("-------------------------------------------")
         is_passed = True
+        get_No = 0
         word_gets = []
+        account_get = 0
+        account_null = 0
         while True:
+            get_No += 1
+            if get_No == 1:
+                account_get = 0
+                account_null = 0
+            if get_No == 3:
+                refresh_chance.join()
             if mode >= 3:
                 print_get_word_status_data(get_word_status.result())
             p_get, p_null, p_success, status_code, p_word = print_get_word_data(get_word.result(), account)
@@ -711,6 +720,8 @@ def main():
                 continue
             word_get_success_count += p_get
             word_get_null_count += p_null
+            account_get += p_get
+            account_null += p_null
             if p_word is not None:
                 word_gets.append(p_word[0])
             if p_success:
@@ -722,9 +733,9 @@ def main():
                 is_passed = False
                 all_account_passed = False
             else:
-                account_count_info['word_get_success'] = p_get
-                account_count_info['word_get_null'] = p_null
-                account_count_info['word_get_total'] = p_get + p_null
+                account_count_info['word_get_success'] = account_get
+                account_count_info['word_get_null'] = account_null
+                account_count_info['word_get_total'] = account_get + account_null
                 account_count_info['words'] = word_gets
                 if is_passed:
                     passed_account_count += 1
