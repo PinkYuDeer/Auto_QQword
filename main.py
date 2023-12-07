@@ -205,7 +205,7 @@ class Words:
                 'qq_count': '1'
             }
         else:
-            self.words[word[0]]['last_time'] = time.strftime("%Y/%m/%d %H:%M:%S", time.localtime())
+            self.words[word[0]]['last_time'] = time.strftime("%Y/%m/%d-%H:%M:%S", time.localtime())
             self.words[word[0]]['count'] = str(int(self.words[word[0]]['count']) + 1)
             self.words[word[0]]['description'] = word[2].replace(' ', '-')
             self.words[word[0]]['last_qq'] = account
@@ -828,6 +828,8 @@ if __name__ == '__main__':
             break
 
     my_process.print_summary()
+
     if not my_process.all_account_passed:
         my_process.save_data()
+        
     input('按任意键退出')
