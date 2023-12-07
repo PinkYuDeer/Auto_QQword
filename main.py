@@ -1,12 +1,13 @@
 import base64
-import json
-import re
-import time
-import threading
-import requests
 import configparser
-from lxml import etree
+import json
 import os
+import re
+import threading
+import time
+
+import requests
+from lxml import etree
 
 
 class MyThread(threading.Thread):
@@ -348,7 +349,30 @@ class MyRequest:
             print('\033[1;31m获取卡池状态失败，错误信息：' + str(e) + '\033[0m')
 
 
-def main():
+class MainProcess:
+    def __init__(self):
+        self.qq = QQ()
+        self.setting = Setting()
+        self.words = Words()
+        self.my_request = MyRequest(self.setting.setting, self.setting.cookies)
+
+        self.mode = int(self.setting.setting['mode'])
+
+        self.start_time = time.time()
+        self.process = 0
+        self.total = len(self.qq.QQ_list)
+
+        self.word_get_success_count = 0
+        self.word_get_null_count = 0
+        self.passed_account_count = 0
+        self.all_account_passed = True
+        self.account_count = []
+
+        self.need_again_QQ_list = {}
+        self.need_again = False
+        self.again = 0
+
+    @staticmethod
     def print_relation_data(data):
         light_up_num = data['light_up_num']
         try:
@@ -411,7 +435,7 @@ def main():
                                 print()
         return word_process, light_up_num
 
-    def print_get_word_data(data, p_account):
+    def print_get_word_data(self, data, p_account):
         get = 0
         null = 0
         if data['ActionStatus'] == 'OK':
@@ -428,7 +452,7 @@ def main():
                 print(word[3])
                 print("\033[33m" + "卡片描述：" + str(word[2]) + "\033[0m\033[40m")
                 get += 1
-                words.add_word(word, p_account)
+                self.words.add_word(word, p_account)
                 return get, null, True, 200, word
         elif data['ActionStatus'] == 'FAIL':
             if data['ErrorCode'] == 10005:
@@ -449,6 +473,7 @@ def main():
             print(data)
             return get, null, False, 404, None
 
+    @staticmethod
     def print_get_word_status_data(data):
         if data['ActionStatus'] == 'OK':
             specialword_frdInfo = data['rpt_msg_get_specialwordlist_rsp'][0]['msg_specialword_frdInfo']
@@ -464,6 +489,7 @@ def main():
             else:
                 print(data)
 
+    @staticmethod
     def print_count_words_data(html):
         div_elements = html.xpath('//*[@id="app"]/div[1]/div[2]/div[3]/div[2]/div')
         if len(div_elements) > 3:
@@ -515,14 +541,20 @@ def main():
                 print("\033[35m 完全点亮：" + str(count) + "张\033[0m\033[40m / \033[35m付费字符无法判断：" + str(unknown) + "张\33[0m\033[40m")
         return number_of_word, count, unknown
 
+    @staticmethod
     def read_old_data(file_name):
         old_data = {}
         acIL = []
         summary = {}
         with open(file_name, 'r', encoding='utf-8') as f:
-            state = 0
+            state = -1
             for line in f:
-                if line[0:4] == 'QQ号 ':
+                if line[0:2] == '模式':
+                    # 这一行是"模式： 1"
+                    state = 0
+                    old_data['mode'] = line[4]
+                    continue
+                elif line[0:4] == 'QQ号 ':
                     state = 1
                     continue
                 elif line[0:2] == '总抽':
@@ -560,58 +592,80 @@ def main():
             old_data['summary'] = summary
         return old_data
 
-    def save_data():
+    def save_data(self):
         print('正在保存抽卡结果...')
-        words.save()
+        self.words.save()
+        print('新抽字符已更新在data/words.txt中')
         file_name = 'data/' + time.strftime("%Y-%m-%d %H-%M-%S", time.localtime()) + '.txt'
         summary = {
-            'word_get_total': word_get_success_count + word_get_null_count,
-            'word_get_success': word_get_success_count,
-            'word_get_null': word_get_null_count,
-            'account_count': len(qq.QQ_list),
-            'passed_account_count': passed_account_count
+            'word_get_total': self.word_get_success_count + self.word_get_null_count,
+            'word_get_success': self.word_get_success_count,
+            'word_get_null': self.word_get_null_count,
+            'account_count': len(self.qq.QQ_list),
+            'passed_account_count': self.passed_account_count
         }
         # data / 读取文件列表
         file_list = os.listdir('data')
         # 判断文件列表中是否存在同天的文件，忽略时分秒
         for file in file_list:
             if file[0:10] == file_name[5:15]:
-                print('检测到同天的抽卡结果文件:' + file + '，正在合并...')
+                print('检测到同天的抽卡结果文件:' + file, end='，')
                 # 读取该文件中的内容，然后删除该文件，将新老数据合并后写入新文件
-                old_data = read_old_data('data/' + file)
-                os.remove('data/' + file)
-                summary['word_get_total'] += old_data['summary']['word_get_total']
-                summary['word_get_success'] += old_data['summary']['word_get_success']
-                summary['word_get_null'] += old_data['summary']['word_get_null']
-                summary['account_count'] += old_data['summary']['account_count']
-                summary['passed_account_count'] += old_data['summary']['passed_account_count']
-                for acI in old_data['account_count']:
-                    for ac in account_count:
-                        if ac['account'] == acI['account']:
-                            ac['word_get_total'] += acI['word_get_total']
-                            ac['word_get_success'] += acI['word_get_success']
-                            ac['word_get_null'] += acI['word_get_null']
-                            ac['light_up'] = acI['light_up']
-                            ac['word_have'] = acI['word_have']
-                            ac['word_light_up'] = acI['word_light_up']
-                            ac['word_unknown'] = acI['word_unknown']
-                            for word in acI['words']:
-                                if word not in ac['words']:
-                                    ac['words'].append(word)
-                        else:
-                            account_count.append(acI)
+                old_data = self.read_old_data('data/' + file)
+                try:
+                    old_data_mode = int(old_data['mode'])
+                    if old_data_mode != self.mode:
+                        print('检测到运行模式不同，已保留旧文件。')
+                        continue
+                    else:
+                        os.remove('data/' + file)
+                        print('正在合并抽卡结果...')
+                    for acI in old_data['account_count']:
+                        for ac in self.account_count:
+                            if ac['account'] == acI['account']:
+                                ac['word_get_total'] += acI['word_get_total']
+                                ac['word_get_success'] += acI['word_get_success']
+                                ac['word_get_null'] += acI['word_get_null']
+                                ac['light_up'] = acI['light_up']
+                                ac['word_have'] = acI['word_have']
+                                ac['word_light_up'] = acI['word_light_up']
+                                ac['word_unknown'] = acI['word_unknown']
+                                for word in acI['words']:
+                                    if word not in ac['words']:
+                                        ac['words'].append(word)
+                            else:
+                                self.account_count.append(acI)
+                    summary['word_get_total'] += old_data['summary']['word_get_total']
+                    summary['word_get_success'] += old_data['summary']['word_get_success']
+                    summary['word_get_null'] += old_data['summary']['word_get_null']
+                    summary['account_count'] += old_data['summary']['account_count']
+                    summary['passed_account_count'] += old_data['summary']['passed_account_count']
+                except KeyError:
+                    print('文件' + file + '损坏，已尽可能提取有用数据。')
                 continue
 
         with open(file_name, 'w', encoding='utf-8') as f:
-            f.write('主号码：' + qq.myself_QQ + '\n')
+            f.write('主号码：' + self.qq.myself_QQ + '\n')
+            f.write('模式：' + self.setting.setting['mode'] + '\n')
             f.write('抽卡结果：\n')
-            f.write('QQ号 备注 总抽数 抽中数 未抽中数 点亮好友关系数 已拥有字符数 字符进度 已拥有完全点亮数 无法判断数 卡片id\n')  # 若备注为空，则备注为N/A
-            for ac in account_count:
+            if int(self.setting.setting['mode']) == 1:
+                f.write('QQ号 备注 总抽数 抽中数 未抽中数 卡片id\n')
+            elif int(self.setting.setting['mode']) == 2:
+                f.write('QQ号 备注 总抽数 抽中数 未抽中数 点亮好友关系数 字符进度 卡片id\n')
+            elif int(self.setting.setting['mode']) >= 3:
+                f.write('QQ号 备注 总抽数 抽中数 未抽中数 点亮好友关系数 已拥有字符数 字符进度 已拥有完全点亮数 无法判断数 卡片id\n')  # 若备注为空，则备注为N/A
+            for ac in self.account_count:
                 ac['name'] = 'N/A' if ac['name'] == '' else ac['name']
                 f.write(ac['account'] + ' ' + ac['name'] + ' ' + str(ac['word_get_total']) + ' ' +
-                        str(ac['word_get_success']) + ' ' + str(ac['word_get_null']) + ' ' +
-                        str(ac['light_up']) + ' ' + str(ac['word_have']) + ' ' + ac['word_process'] + ' ' +
-                        str(ac['word_light_up']) + ' ' + str(ac['word_unknown']) + ' ')
+                        str(ac['word_get_success']) + ' ' + str(ac['word_get_null']) + ' ')
+                if self.mode >= 2:
+                    f.write(str(ac['light_up']) + ' ')
+                if self.mode >= 3:
+                    f.write(str(ac['word_have']) + ' ')
+                if self.mode >= 2:
+                    f.write(str(ac['word_process']) + ' ')
+                if self.mode >= 3:
+                    f.write(str(ac['word_light_up']) + ' ' + str(ac['word_unknown']) + ' ')
                 for word in ac['words']:
                     f.write(word[0] + ' ')
                 f.seek(f.tell() - 1, 0)
@@ -622,143 +676,158 @@ def main():
                     str(summary['passed_account_count']))
         print('抽卡结果保存在' + file_name)
 
-    def progress_bar(current):
-        progress = current / total
+    def progress_bar(self):
+        progress = self.process / self.total
         progress_bar_length = 30
         done_length = int(progress * progress_bar_length)
         remaining_length = progress_bar_length - done_length
 
         percentage = progress * 100
-        time_elapsed = time.time() - start_time if current > 0 else 0
-        time_per_unit = time_elapsed / current if current > 0 else 0
-        estimated_time_remaining = time_per_unit * (total - current)
+        time_elapsed = time.time() - self.start_time if self.process > 0 else 0
+        time_per_unit = time_elapsed / self.process if self.process > 0 else 0
+        estimated_time_remaining = time_per_unit * (self.total - self.process)
 
         progress_bar_str = '█' * done_length + '_' * remaining_length
         if time_elapsed == 0:
-            status_str = f"[{progress_bar_str}] ({percentage:.2f}%)  */秒|剩余*秒 {current}/{total}"
+            status_str = f"[{progress_bar_str}] ({percentage:.2f}%)  */秒|剩余*秒 {self.process}/{self.total}"
         else:
-            status_str = f"[{progress_bar_str}] ({percentage:.2f}%)  {current / time_elapsed:.2f}/秒|剩余{estimated_time_remaining:.2f}秒 {current}/{total}"
+            status_str = (f"[{progress_bar_str}] ({percentage:.2f}%)  {self.process / time_elapsed:.2f}/秒|"
+                          f"剩余{estimated_time_remaining:.2f}秒 {self.process}/{self.total}")
         # 将status_str红字输出
-        if mode == -1:
+        if self.mode == -1:
             print("\r")
         print("\033[31m" + status_str + "\033[0m\033[40m", end='')
-        if mode != -1:
+        if self.mode != -1:
             print()
 
-    qq = QQ()
-    setting = Setting()
-    words = Words()
-    my_request = MyRequest(setting.setting, setting.cookies)
+    def get_word_in_list(self, my_list):
+        print('开始抽卡...')
+        self.need_again = False
+        self.need_again_QQ_list = {}
+        for account, name in my_list.items():
+            print("\033[0;30;47m " + account + ' ' + name + " \033[0m\033[40m", end=' - ')
+            account_count_info = {
+                'account': account,
+                'name': name,
+            }
 
-    word_get_success_count = 0
-    word_get_null_count = 0
-    passed_account_count = 0
-    all_account_passed = True
-    account_count = []
+            # 获取好友关系 2
+            count_relation = MyThread(self.my_request.count_relation, args=(account,))
 
-    mode = int(setting.setting['mode'])
+            # 抽卡 1
+            refresh_chance = MyThread(self.my_request.refresh_chance, args=(account,))
+            get_word = MyThread(self.my_request.get_word, args=(account, self.qq.myself_QQ))
 
-    start_time = time.time()
-    process = 0
-    total = len(qq.QQ_list)
-    print('开始抽卡...')
-    for account, name in qq.QQ_list.items():
-        print("\033[0;30;47m " + account + ' ' + name + " \033[0m\033[40m", end=' - ')
-        account_count_info = {
-            'account': account,
-            'name': name,
-        }
+            # 获取卡池状态 3
+            get_word_status = MyThread(self.my_request.get_word_status, args=(account,))
 
-        # 获取好友关系 2
-        count_relation = MyThread(my_request.count_relation, args=(account,))
+            # 统计字符数量 2
+            count_words = MyThread(self.my_request.count_words, args=(account,))
 
-        # 抽卡 1
-        refresh_chance = MyThread(my_request.refresh_chance, args=(account,))
-        get_word = MyThread(my_request.get_word, args=(account, qq.myself_QQ))
+            # 开始线程
+            refresh_chance.start()
+            if self.mode >= 2:
+                count_relation.start()
+            get_word.start()
+            if self.mode >= 3:
+                get_word_status.start()
 
-        # 获取卡池状态 3
-        get_word_status = MyThread(my_request.get_word_status, args=(account,))
+            # 获取线程返回值
+            if self.mode >= 2:
+                account_count_info['word_process'], account_count_info['light_up'] = self.print_relation_data(count_relation.result())
+                print("-------------------------------------------")
+            is_passed = True
+            get_No = 0
+            word_gets = []
+            account_get = 0
+            account_null = 0
+            while True:
+                get_No += 1
+                if get_No == 1:
+                    account_get = 0
+                    account_null = 0
+                if get_No == 2 or self.again > 0:
+                    refresh_chance.join()
+                if self.mode >= 3:
+                    self.print_get_word_status_data(get_word_status.result())
+                p_get, p_null, p_success, status_code, p_word = self.print_get_word_data(get_word.result(), account)
+                if status_code == 151:
+                    self.setting.recover_cookies()
+                    self.my_request = MyRequest(self.setting.setting, self.setting.cookies)
+                    get_word = MyThread(self.my_request.get_word, args=(account, self.qq.myself_QQ))
+                    get_word.start()
+                    if self.mode >= 3:
+                        get_word_status = MyThread(self.my_request.get_word_status, args=(account,))
+                        get_word_status.start()
+                    continue
+                elif status_code == 201:
+                    if get_No == 2:
+                        self.need_again_QQ_list[account] = name
+                        self.need_again = True
+                    if self.again > 0:
+                        for ac in self.account_count:
+                            if ac['account'] == account and ac['word_get_total'] < 3:
+                                self.need_again_QQ_list[account] = name
+                                self.need_again = True
+                                break
 
-        # 统计字符数量 2
-        count_words = MyThread(my_request.count_words, args=(account,))
+                self.word_get_success_count += p_get
+                self.word_get_null_count += p_null
+                account_get += p_get
+                account_null += p_null
+                if p_word is not None:
+                    word_gets.append(p_word[0])
+                if p_success:
+                    get_word = MyThread(self.my_request.get_word, args=(account, self.qq.myself_QQ))
+                    get_word.start()
+                    if self.mode >= 3:
+                        get_word_status = MyThread(self.my_request.get_word_status, args=(account,))
+                        get_word_status.start()
+                    is_passed = False
+                    self.all_account_passed = False
+                else:
+                    account_count_info['word_get_success'] = account_get
+                    account_count_info['word_get_null'] = account_null
+                    account_count_info['word_get_total'] = account_get + account_null
+                    account_count_info['words'] = word_gets
+                    if is_passed:
+                        self.passed_account_count += 1
+                    break
 
-        # 开始线程
-        refresh_chance.start()
-        if mode >= 2:
-            count_relation.start()
-        get_word.start()
-        if mode >= 3:
-            get_word_status.start()
+            # 统计字符数量
+            if self.mode >= 2:
+                print("-------------------------------------------")
+                count_words.start()
+                account_count_info['word_have'], account_count_info['word_light_up'], account_count_info['word_unknown'] = self.print_count_words_data(
+                    count_words.result())
 
-        # 获取线程返回值
-        if mode >= 2:
-            account_count_info['word_process'], account_count_info['light_up'] = print_relation_data(count_relation.result())
-            print("-------------------------------------------")
-        is_passed = True
-        get_No = 0
-        word_gets = []
-        account_get = 0
-        account_null = 0
-        while True:
-            get_No += 1
-            if get_No == 1:
-                account_get = 0
-                account_null = 0
-            if get_No == 3:
-                refresh_chance.join()
-            if mode >= 3:
-                print_get_word_status_data(get_word_status.result())
-            p_get, p_null, p_success, status_code, p_word = print_get_word_data(get_word.result(), account)
-            if status_code == 151:
-                setting.recover_cookies()
-                my_request = MyRequest(setting, setting.cookies)
-                get_word = MyThread(my_request.get_word, args=(account, qq.myself_QQ))
-                get_word.start()
-                if mode >= 3:
-                    get_word_status = MyThread(my_request.get_word_status, args=(account,))
-                    get_word_status.start()
-                continue
-            word_get_success_count += p_get
-            word_get_null_count += p_null
-            account_get += p_get
-            account_null += p_null
-            if p_word is not None:
-                word_gets.append(p_word[0])
-            if p_success:
-                get_word = MyThread(my_request.get_word, args=(account, qq.myself_QQ))
-                get_word.start()
-                if mode >= 3:
-                    get_word_status = MyThread(my_request.get_word_status, args=(account,))
-                    get_word_status.start()
-                is_passed = False
-                all_account_passed = False
-            else:
-                account_count_info['word_get_success'] = account_get
-                account_count_info['word_get_null'] = account_null
-                account_count_info['word_get_total'] = account_get + account_null
-                account_count_info['words'] = word_gets
-                if is_passed:
-                    passed_account_count += 1
-                break
+            self.account_count.append(account_count_info)
+            self.process += 1
+            self.progress_bar()
+            print("\33[0m=================================================================================================================")
 
-        # 统计字符数量
-        if mode >= 2:
-            print("-------------------------------------------")
-            count_words.start()
-            account_count_info['word_have'], account_count_info['word_light_up'], account_count_info['word_unknown'] = print_count_words_data(
-                count_words.result())
+    def print_summary(self):
+        header = f"{'总抽':^6} {'抽中':^6} {'null':^8} {'总人':^6} {'跳过':^6}"
+        values = f"{self.word_get_success_count + self.word_get_null_count:^7} " \
+                 f"{self.word_get_success_count:^7} " \
+                 f"{self.word_get_null_count:^9} " \
+                 f"{len(self.qq.QQ_list):^7} " \
+                 f"{self.passed_account_count:^7}"
 
-        account_count.append(account_count_info)
-        process += 1
-        progress_bar(process)
-        print("\33[0m=================================================================================================================")
-    print('\n\33[40m总抽 抽中 null 总人 跳过')
-    print(str(word_get_success_count + word_get_null_count) + ' ' + str(word_get_success_count) + ' ' + str(word_get_null_count) + ' ' + str(len(qq.QQ_list))
-          + ' ' + str(passed_account_count))
-    if not all_account_passed:
-        save_data()
+        print(f"\n\33[40m{header}")
+        print(values)
 
 
 if __name__ == '__main__':
-    main()
+    my_process = MainProcess()
+    my_process.get_word_in_list(my_process.qq.QQ_list)
+    while my_process.need_again:
+        my_process.again += 1
+        my_process.get_word_in_list(my_process.need_again_QQ_list)
+        if my_process.again == 5:
+            break
+
+    my_process.print_summary()
+    if not my_process.all_account_passed:
+        my_process.save_data()
     input('按任意键退出')
