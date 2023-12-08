@@ -712,10 +712,17 @@ class MainProcess:
         self.need_again_QQ_list = {}
         for account, name in my_list.items():
             print("\033[0;30;47m " + account + ' ' + name + " \033[0m\033[40m", end=' - ')
-            account_count_info = {
-                'account': account,
-                'name': name,
-            }
+            if self.again == 0:
+                account_count_info = {
+                    'account': account,
+                    'name': name,
+                }
+            else:
+                for ac in self.account_count:
+                    if ac['account'] == account:
+                        account_count_info = ac
+                        self.account_count.remove(ac)
+                        break
 
             # 获取好友关系 2
             count_relation = MyThread(self.my_request.count_relation, args=(account,))
