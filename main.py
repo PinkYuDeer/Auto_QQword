@@ -718,6 +718,10 @@ class MainProcess:
                     'name': name,
                 }
             else:
+                account_count_info = {
+                    'account': account,
+                    'name': name,
+                }
                 for ac in self.account_count:
                     if ac['account'] == account:
                         account_count_info = ac
@@ -760,8 +764,8 @@ class MainProcess:
             is_passed = True
             get_No = 0
             word_gets = []
-            account_get = 0
-            account_null = 0
+            account_get = account_count_info['word_get_success'] if 'word_get_success' in account_count_info else 0
+            account_null = account_count_info['word_get_null'] if 'word_get_null' in account_count_info else 0
             while True:
                 get_No += 1
                 if get_No == 1:
