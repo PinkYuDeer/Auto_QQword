@@ -239,6 +239,8 @@ class MyRequest:
         try:
             response = requests.get(url, params=params, headers=headers, cookies=self.cookies)
             if response.status_code == 200:
+                if json.loads(response.text)['msg'][0:22] == 'ptlogin-ex verify fail':
+                    return 151
                 return json.loads(response.text)['data']
             else:
                 print('\033[1;31m获取好友关系失败，错误码：' + str(response.status_code) + '\033[0m')
@@ -246,7 +248,7 @@ class MyRequest:
             print('\033[1;31m获取好友关系失败，错误信息：' + str(e) + '\033[0m')
         except KeyError:
             print('\033[1;31m获取好友关系失败，错误信息：' + str(response.text) + '\033[0m')
-        return "None"
+        return response
 
     def count_words(self, account):
         url = 'https://ti.qq.com/hybrid-h5/interactive_logo/word'
@@ -374,7 +376,11 @@ class MainProcess:
 
     @staticmethod
     def print_relation_data(data):
-        light_up_num = data['light_up_num']
+        if data == "None":
+            print("\033[31m" + '获取好友关系失败' + "\033[0m\033[40m")
+            return
+        # 判断是否存在data['light_up_num']
+        light_up_num = data['light_up_num'] if 'light_up_num' in data else 0
         try:
             if data['category_list'][3]['mutual_mark_state_list'][0]['status']['is_lightup']:
                 light_up_num -= 1
@@ -726,15 +732,23 @@ class MainProcess:
 
             # 开始线程
             refresh_chance.start()
-            if self.mode >= 2:
+            if self.mode >= 2 and self.again == 0:
                 count_relation.start()
             get_word.start()
             if self.mode >= 3:
                 get_word_status.start()
 
             # 获取线程返回值
-            if self.mode >= 2:
-                account_count_info['word_process'], account_count_info['light_up'] = self.print_relation_data(count_relation.result())
+            if self.mode >= 2 and self.again == 0:
+                relation_data = count_relation.result()
+                while relation_data == 151:
+                    print("\033[31m" + '登录过期，正在尝试重新登录' + "\033[0m")
+                    self.setting.recover_cookies()
+                    self.my_request = MyRequest(self.setting.setting, self.setting.cookies)
+                    count_relation = MyThread(self.my_request.get_word, args=(account, self.qq.myself_QQ))
+                    count_relation.start()
+                    relation_data = count_relation.result()
+                account_count_info['word_process'], account_count_info['light_up'] = self.print_relation_data(relation_data)
                 print("-------------------------------------------")
             is_passed = True
             get_No = 0
@@ -756,7 +770,7 @@ class MainProcess:
                     self.my_request = MyRequest(self.setting.setting, self.setting.cookies)
                     get_word = MyThread(self.my_request.get_word, args=(account, self.qq.myself_QQ))
                     get_word.start()
-                    if self.mode >= 3:
+                    if self.mode >= 3 and self.again == 0:
                         get_word_status = MyThread(self.my_request.get_word_status, args=(account,))
                         get_word_status.start()
                     continue
@@ -795,7 +809,7 @@ class MainProcess:
                     break
 
             # 统计字符数量
-            if self.mode >= 2:
+            if self.mode >= 2 and self.again == 0:
                 print("-------------------------------------------")
                 count_words.start()
                 account_count_info['word_have'], account_count_info['word_light_up'], account_count_info['word_unknown'] = self.print_count_words_data(
