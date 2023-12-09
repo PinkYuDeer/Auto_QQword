@@ -247,6 +247,10 @@ class MyRequest:
         except requests.exceptions.RequestException as e:
             print('\033[1;31m获取好友关系失败，错误信息：' + str(e) + '\033[0m')
         except KeyError:
+            if json.loads(response.text)['retcode'] == 10005:
+                print('\033[1;31m' + json.loads(response.text)['msg'] + '\033[0m')
+                time.sleep(1)
+                return self.count_relation(account)
             print('\033[1;31m获取好友关系失败，错误信息：' + str(response.text) + '\033[0m')
         return response
 
@@ -405,7 +409,7 @@ class MainProcess:
             print('，点亮稀有标识：' + str(rarity_light_up_num) + '个', end='')
         if int(Qualified_num) > 0:
             print('，限定标识：' + str(Qualified_num) + '个', end='')
-        print(":")
+        print(":", end='')
         mark = {}
         line_item = 0
         for category in data['category_list']:
@@ -417,28 +421,31 @@ class MainProcess:
                         level = mutual_mark_state['status']['level']
                         for i in mutual_mark_state['info']['graded']:
                             if i['level'] == level:
+                                if line_item == 0:
+                                    print()
                                 print("\033[35m新奇物种：" + i['name'] + "\033[0m\033[40m" + '|\033[32m' +
                                       mutual_mark_state['status']['lightup_days'] + '天\033[0m\033[40m', end='')
                                 line_item += 1
                                 if line_item == 4:
-                                    print("\033[36m" + ";" + "\033[0m\033[40m")
+                                    print("\033[36m" + ";" + "\033[0m\033[40m", end='')
                                     line_item = 0
                                 else:
                                     print(' - ', end='')
                                 break
                     else:
+                        if line_item == 0:
+                            print()
                         print("\033[36m" + mutual_mark_state['info']['intro'] + "\033[0m\033[40m" + '|\033[32m' +
                               mutual_mark_state['status']['lightup_days'] + '天\033[0m\033[40m', end='')
                         line_item += 1
                         if line_item == 4:
-                            print("\033[36m" + ";" + "\033[0m\033[40m")
+                            print("\033[36m" + ";" + "\033[0m\033[40m", end='')
                             line_item = 0
                         else:
                             if category['mutual_mark_state_list'].index(mutual_mark_state) != len(
                                     category['mutual_mark_state_list']) - 1:
                                 print(' - ', end='')
-                            else:
-                                print()
+        print()
         return word_process, light_up_num
 
     def print_get_word_data(self, data, p_account):
@@ -830,6 +837,9 @@ class MainProcess:
             self.process += 1
             self.progress_bar()
             print("\33[0m=================================================================================================================")
+            if self.process == self.total:
+                print("\n\033[1;32m抽卡完成，正在总结。。。\033[0m")
+                break
 
     def print_summary(self):
         header = f"{'总抽':^6} {'抽中':^6} {'null':^8} {'总人':^6} {'跳过':^6}"
@@ -857,4 +867,4 @@ if __name__ == '__main__':
     if not my_process.all_account_passed:
         my_process.save_data()
         
-    input('按任意键退出')
+    input('\033[0m\n按任意键退出')
