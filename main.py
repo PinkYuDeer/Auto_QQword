@@ -714,7 +714,10 @@ class MainProcess:
             print()
 
     def get_word_in_list(self, my_list):
-        print('开始抽卡...')
+        if self.again == 0:
+            print('开始抽卡...')
+        else:
+            print('\n\n开始第' + str(self.again) + '次补漏抽卡...')
         self.need_again = False
         self.need_again_QQ_list = {}
         for account, name in my_list.items():
