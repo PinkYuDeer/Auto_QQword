@@ -681,7 +681,7 @@ class MainProcess:
                 if self.mode >= 3:
                     f.write(str(ac['word_light_up']) + ' ' + str(ac['word_unknown']) + ' ')
                 for word in ac['words']:
-                    f.write(word[0] + ' ')
+                    f.write(word + ' ')
                 f.seek(f.tell() - 1, 0)
                 f.write('\n')
             f.write('\n总抽 抽中 null 总人 跳过\n')
@@ -770,7 +770,7 @@ class MainProcess:
                     print("\033[31m" + '登录过期，正在尝试重新登录' + "\033[0m")
                     self.setting.recover_cookies()
                     self.my_request = MyRequest(self.setting.setting, self.setting.cookies)
-                    count_relation = MyThread(self.my_request.get_word, args=(account, self.qq.myself_QQ))
+                    count_relation = MyThread(self.my_request.count_relation, args=(account, self.qq.myself_QQ))
                     count_relation.start()
                     relation_data = count_relation.result()
                 account_count_info['word_process'], account_count_info['light_up'] = self.print_relation_data(relation_data)
@@ -845,8 +845,8 @@ class MainProcess:
             self.process += 1
             self.progress_bar()
             print("\33[0m=================================================================================================================")
-            if self.process == self.total:
-                print("\n\033[32m抽卡完成，正在总结。。。\033[0m")
+            if self.process == self.total and self.again != self.max_again:
+                print("\n\033[32m抽卡完成，正在总结...\033[0m")
                 break
 
     def print_summary(self):
