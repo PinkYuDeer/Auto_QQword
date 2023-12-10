@@ -377,6 +377,7 @@ class MainProcess:
         self.need_again_QQ_list = {}
         self.need_again = False
         self.again = 0
+        self.max_again = 2
 
     @staticmethod
     def print_relation_data(data):
@@ -798,17 +799,17 @@ class MainProcess:
                         get_word_status = MyThread(self.my_request.get_word_status, args=(account,))
                         get_word_status.start()
                     continue
-                elif status_code == 201:
+                elif status_code == 202:
                     if get_No == 2:
                         self.need_again_QQ_list[account] = name
                         self.need_again = True
-                elif status_code == 202:
-                    if self.again > 0:
-                        for ac in self.account_count:
-                            if ac['account'] == account and ac['word_get_total'] < 3:
-                                self.need_again_QQ_list[account] = name
-                                self.need_again = True
-                                break
+                    if self.again == self.max_again:
+                        p_null += 1
+                    elif self.again > 0:
+                        if account_get + account_null < 3:
+                            self.need_again_QQ_list[account] = name
+                            self.need_again = True
+                            break
 
                 self.word_get_success_count += p_get
                 self.word_get_null_count += p_null
@@ -866,7 +867,7 @@ if __name__ == '__main__':
     while my_process.need_again:
         my_process.again += 1
         my_process.get_word_in_list(my_process.need_again_QQ_list)
-        if my_process.again == 5:
+        if my_process.again == my_process.max_again:
             break
 
     my_process.print_summary()
