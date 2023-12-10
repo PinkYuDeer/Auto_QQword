@@ -846,7 +846,7 @@ class MainProcess:
             self.progress_bar()
             print("\33[0m=================================================================================================================")
             if self.process == self.total and self.again != self.max_again:
-                print("\n\033[32m抽卡完成，正在总结...\033[0m")
+                print("\n\033[32m抽卡完成，正在总结....\033[0m")
                 break
 
     def print_summary(self):
