@@ -717,6 +717,9 @@ class MainProcess:
         if self.again == 0:
             print('开始抽卡...')
         else:
+            self.start_time = time.time()
+            self.process = 0
+            self.total = len(self.need_again_QQ_list)
             print('\n\n开始第' + str(self.again) + '次补漏抽卡...')
         self.need_again = False
         self.need_again_QQ_list = {}
@@ -799,6 +802,7 @@ class MainProcess:
                     if get_No == 2:
                         self.need_again_QQ_list[account] = name
                         self.need_again = True
+                elif status_code == 202:
                     if self.again > 0:
                         for ac in self.account_count:
                             if ac['account'] == account and ac['word_get_total'] < 3:
@@ -841,7 +845,7 @@ class MainProcess:
             self.progress_bar()
             print("\33[0m=================================================================================================================")
             if self.process == self.total:
-                print("\n\033[1;32m抽卡完成，正在总结。。。\033[0m")
+                print("\n\033[32m抽卡完成，正在总结。。。\033[0m")
                 break
 
     def print_summary(self):
