@@ -803,7 +803,7 @@ class MainProcess:
                     if get_No == 2:
                         self.need_again_QQ_list[account] = name
                         self.need_again = True
-                    if self.again == self.max_again:
+                    elif self.again == self.max_again:
                         p_null += 1
                     elif self.again > 0:
                         if account_get + account_null < 3:
