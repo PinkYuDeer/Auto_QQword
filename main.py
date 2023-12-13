@@ -770,7 +770,7 @@ class MainProcess:
                     print("\033[31m" + '登录过期，正在尝试重新登录' + "\033[0m")
                     self.setting.recover_cookies()
                     self.my_request = MyRequest(self.setting.setting, self.setting.cookies)
-                    count_relation = MyThread(self.my_request.count_relation, args=(account, self.qq.myself_QQ))
+                    count_relation = MyThread(self.my_request.count_relation, args=(account,))
                     count_relation.start()
                     relation_data = count_relation.result()
                 account_count_info['word_process'], account_count_info['light_up'] = self.print_relation_data(relation_data)
@@ -800,16 +800,16 @@ class MainProcess:
                         get_word_status.start()
                     continue
                 elif status_code == 202:
-                    if get_No == 2:
-                        self.need_again_QQ_list[account] = name
-                        self.need_again = True
-                    elif self.again == self.max_again:
+                    if self.again == self.max_again:
                         p_null += 1
                     elif self.again > 0:
                         if account_get + account_null < 3:
                             self.need_again_QQ_list[account] = name
                             self.need_again = True
                             break
+                    elif 3 >= get_No > 1:
+                        self.need_again_QQ_list[account] = name
+                        self.need_again = True
 
                 self.word_get_success_count += p_get
                 self.word_get_null_count += p_null
@@ -830,7 +830,7 @@ class MainProcess:
                     account_count_info['word_get_null'] = account_null
                     account_count_info['word_get_total'] = account_get + account_null
                     account_count_info['words'] = word_gets
-                    if is_passed:
+                    if is_passed and self.again == 0:
                         self.passed_account_count += 1
                     break
 
