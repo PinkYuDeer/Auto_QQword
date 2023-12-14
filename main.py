@@ -756,9 +756,10 @@ class MainProcess:
             count_words = MyThread(self.my_request.count_words, args=(account,))
 
             # 开始线程
-            refresh_chance.start()
             if self.mode >= 2 and self.again == 0:
                 count_relation.start()
+            refresh_chance.start()
+            refresh_chance.join()
             get_word.start()
             if self.mode >= 3:
                 get_word_status.start()
@@ -777,7 +778,7 @@ class MainProcess:
                 print("-------------------------------------------")
             is_passed = True
             get_No = 0
-            word_gets = []
+            word_gets = account_count_info['words'] if 'words' in account_count_info else []
             account_get = account_count_info['word_get_success'] if 'word_get_success' in account_count_info else 0
             account_null = account_count_info['word_get_null'] if 'word_get_null' in account_count_info else 0
             while True:
@@ -785,8 +786,6 @@ class MainProcess:
                 if get_No == 1:
                     account_get = 0
                     account_null = 0
-                if get_No == 2 or self.again > 0:
-                    refresh_chance.join()
                 if self.mode >= 3:
                     self.print_get_word_status_data(get_word_status.result())
                 p_get, p_null, p_success, status_code, p_word = self.print_get_word_data(get_word.result(), account)
