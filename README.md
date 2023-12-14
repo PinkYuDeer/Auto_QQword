@@ -3,6 +3,12 @@
 效果：
 ![image](https://github.com/PinkYuDeer/Auto_QQword/assets/83949453/ec6a0baa-d5a1-4e4e-b99a-8b6b5b60ca11)
 
+![814fd65c024bf0a94b77199e8c111925](https://github.com/PinkYuDeer/Auto_QQword/assets/83949453/d3b0b9e8-c504-4275-aef4-53d9b1aaf0bb)
+
+![image](https://github.com/PinkYuDeer/Auto_QQword/assets/83949453/0da166a1-3ccd-4f96-af66-21461dc3481d)         ![image](https://github.com/PinkYuDeer/Auto_QQword/assets/83949453/1b191715-68eb-4141-aac3-85f662e2b8cd)
+
+
+
 - 如果运行出现了乱码或者/033等说明缺少解析彩色控制台的转义文件，可以在[这里](https://github.com/adoxa/ansicon/releases)下载，运行对应版本的exe即可。
 - 在运行了一阵子之后可以使用[字符显示小工具](https://github.com/PinkYuDeer/Auto_QQCard_word_show)来查看当前字符
 
