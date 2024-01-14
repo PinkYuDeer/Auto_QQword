@@ -759,7 +759,8 @@ class MainProcess:
             if self.mode >= 2 and self.again == 0:
                 count_relation.start()
             refresh_chance.start()
-            refresh_chance.join()
+            if self.mode == 1 or self.again > 0:
+                refresh_chance.join()
             get_word.start()
             if self.mode >= 3:
                 get_word_status.start()
@@ -774,6 +775,8 @@ class MainProcess:
                     count_relation = MyThread(self.my_request.count_relation, args=(account,))
                     count_relation.start()
                     relation_data = count_relation.result()
+                self.start_time = time.time()
+                self.process = 0
                 account_count_info['word_process'], account_count_info['light_up'] = self.print_relation_data(relation_data)
                 print("-------------------------------------------")
             is_passed = True
@@ -786,14 +789,18 @@ class MainProcess:
                 if get_No == 1:
                     account_get = 0
                     account_null = 0
+                elif get_No == 2 and self.mode > 1:
+                    refresh_chance.join()
                 if self.mode >= 3:
                     self.print_get_word_status_data(get_word_status.result())
                 p_get, p_null, p_success, status_code, p_word = self.print_get_word_data(get_word.result(), account)
                 if status_code == 151:
                     self.setting.recover_cookies()
+                    self.process = 0
                     self.my_request = MyRequest(self.setting.setting, self.setting.cookies)
                     get_word = MyThread(self.my_request.get_word, args=(account, self.qq.myself_QQ))
                     get_word.start()
+                    self.start_time = time.time()
                     if self.mode >= 3 and self.again == 0:
                         get_word_status = MyThread(self.my_request.get_word_status, args=(account,))
                         get_word_status.start()
